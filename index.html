@@ -1,0 +1,42 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Reservar turno</title>
+<style>
+:root{--bg:#faf9f7;--fg:#1c1b1a;--mut:#77726b;--ac:#1c1b1a;--bd:#e4e0da;--card:#fff}
+@media(prefers-color-scheme:dark){:root{--bg:#141413;--fg:#f2efe9;--mut:#9a948b;--ac:#f2efe9;--bd:#2f2d2a;--card:#1d1c1a}}
+*{box-sizing:border-box}body{margin:0;font:16px system-ui,sans-serif;background:var(--bg);color:var(--fg)}
+main{max-width:520px;margin:0 auto;padding:20px 16px 60px}h1{font-size:24px;margin:8px 0 2px}h2{font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:var(--mut);margin:26px 0 10px}
+.sub{color:var(--mut);margin:0}.row{display:flex;flex-wrap:wrap;gap:8px}
+.chip{padding:12px 14px;border:1px solid var(--bd);border-radius:12px;background:var(--card);color:var(--fg);font:inherit;cursor:pointer;min-height:48px}
+.chip.on{background:var(--ac);color:var(--bg);border-color:var(--ac)}.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+input{width:100%;padding:14px;border:1px solid var(--bd);border-radius:12px;font:inherit;background:var(--card);color:var(--fg);margin-bottom:8px}
+.sum{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:14px;line-height:1.7;margin:16px 0}
+.go{width:100%;padding:16px;border:0;border-radius:14px;background:var(--ac);color:var(--bg);font:600 16px system-ui;cursor:pointer}.go:disabled{opacity:.4}
+.err{color:#c0392b;margin:8px 0}.ok{text-align:center;padding:40px 0}
+</style></head><body><main id="app">Cargando…</main>
+<script>
+const S={date:null,staff:null,gender:'M',svc:null,time:null,slots:null,name:'',surname:'',phone:'',err:'',done:null,busy:false};let C;
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const iso=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+const days=[...Array(21)].map((_,i)=>{const d=new Date();d.setDate(d.getDate()+i);return d});
+const lab=d=>d.toLocaleDateString('es-AR',{weekday:'long',day:'numeric',month:'numeric'});
+async function api(p,o){const r=await fetch(p,o),j=await r.json();if(!r.ok)throw new Error(j.error||'Error');return j}
+function svcs(){const st=C.staff.find(x=>x.id==S.staff);const g=st&&st.does_female?S.gender:'M';return C.services.filter(s=>s.category=='any'||s.category==g)}
+async function loadSlots(){S.slots=null;S.time=null;if(!(S.date&&S.staff&&S.svc))return draw();draw();try{S.slots=(await api(`/api/public/availability?date=${S.date}&staff_id=${S.staff}&service_id=${S.svc}`)).slots}catch(e){S.err=e.message}draw()}
+const pick=(k,v,r)=>{S[k]=v;S.err='';if(k=='staff'||k=='gender'){S.svc=null;if(k=='staff')S.gender='M'}if(k!='time')return loadSlots();draw()};
+function draw(){if(S.done)return $('#app').innerHTML=`<div class="ok"><div style="font-size:48px">✓</div><h1>Turno reservado correctamente.</h1><p class="sub">${esc(S.done.peluquero)} · ${esc(S.done.fecha)} · ${esc(S.done.hora)}<br>¡Te esperamos, ${esc(S.done.cliente)}!</p></div>`;
+const st=C.staff.find(x=>x.id==S.staff),sv=C.services.find(x=>x.id==S.svc);
+let h=`<h1>${esc(C.negocio.name)}</h1><p class="sub">Reservá tu turno en pocos pasos</p><h2>1 · Día</h2><div class="row">${days.map(d=>`<button class="chip ${S.date==iso(d)?'on':''}" onclick="pick('date','${iso(d)}')">${lab(d)}</button>`).join('')}</div>
+<h2>2 · Peluquero</h2><div class="row">${C.staff.map(s=>`<button class="chip ${S.staff==s.id?'on':''}" onclick="pick('staff',${s.id})">${esc(s.name)}</button>`).join('')}</div>`;
+if(st&&st.does_female)h+=`<h2>Para</h2><div class="row"><button class="chip ${S.gender=='M'?'on':''}" onclick="pick('gender','M')">Hombre</button><button class="chip ${S.gender=='F'?'on':''}" onclick="pick('gender','F')">Mujer</button></div>`;
+if(st)h+=`<h2>3 · Servicio</h2><div class="row">${svcs().map(s=>`<button class="chip ${S.svc==s.id?'on':''}" onclick="pick('svc',${s.id})">${esc(s.name)}${s.price?' · $'+s.price.toLocaleString('es-AR'):''}</button>`).join('')}</div>`;
+if(S.date&&S.staff&&S.svc){h+=`<h2>4 · Horario</h2>`;if(S.slots===null)h+='<p class="sub">Buscando…</p>';else if(!S.slots.length)h+='<p class="sub">No hay horarios disponibles ese día. Probá con otro.</p>';else h+=`<div class="grid">${S.slots.map(t=>`<button class="chip ${S.time==t?'on':''}" onclick="pick('time','${t}')">${t}</button>`).join('')}</div>`}
+if(S.time){h+=`<h2>5 · Tus datos</h2><input placeholder="Nombre" value="${esc(S.name)}" oninput="S.name=this.value;chk()" autocomplete="given-name"><input placeholder="Apellido" value="${esc(S.surname)}" oninput="S.surname=this.value;chk()" autocomplete="family-name"><input placeholder="WhatsApp (ej: 351 123 4567)" inputmode="tel" value="${esc(S.phone)}" oninput="S.phone=this.value;chk()" autocomplete="tel">
+<div class="sum"><b>Peluquero:</b> ${esc(st.name)}<br><b>Fecha:</b> ${S.date.split('-').reverse().join('/')}<br><b>Hora:</b> ${S.time}<br><b>Servicio:</b> ${esc(sv.name)}<br><b>Cliente:</b> <span id="cn">${esc(S.name+' '+S.surname)}</span></div>
+<div class="err" id="er">${esc(S.err)}</div><button class="go" id="go" onclick="book()">CONFIRMAR TURNO</button>`}
+else if(S.err)h+=`<div class="err">${esc(S.err)}</div>`;
+$('#app').innerHTML=h;if(S.time)chk()}
+const $=s=>document.querySelector(s);
+function chk(){$('#go').disabled=S.busy||S.name.trim().length<2||S.surname.trim().length<1||S.phone.replace(/\D/g,'').length<8;$('#cn').textContent=S.name+' '+S.surname}
+async function book(){S.busy=true;chk();try{S.done=await api('/api/public/book',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({staff_id:S.staff,service_id:S.svc,date:S.date,start:S.time,name:S.name,surname:S.surname,phone:S.phone})})}catch(e){S.err=e.message;S.time=null;await loadSlots()}S.busy=false;draw()}
+api('/api/public/config').then(c=>{C=c;draw()}).catch(e=>$('#app').textContent=e.message)
+</script></body></html>
